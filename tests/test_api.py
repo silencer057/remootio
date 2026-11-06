@@ -631,3 +631,61 @@ class TestRemootioEventListener:
         await listener._listen_loop()
 
         assert call_count == 3
+
+
+# ── duration (API v3 hold) ─────────────────────────────────────────────────
+
+class TestSendCommandDuration:
+    """The optional v3 ``duration`` field must be in the encrypted action
+    only when requested, so plain commands are byte-for-byte unchanged."""
+
+    async def _sent_action(self, **kwargs) -> dict:
+        api = RemootioAPI(TEST_HOST, TEST_SECRET_KEY, TEST_AUTH_KEY)
+        challenge = encrypt_frame(
+            {
+                "challenge": {
+                    "sessionKey": b64encode(bytes.fromhex(TEST_SECRET_KEY)).decode(),
+                    "initialActionId": 100,
+                }
+            },
+            TEST_SECRET_KEY,
+            TEST_AUTH_KEY,
+        )
+        reply = encrypt_frame(
+            {"response": {"success": True, "relayTriggered": True}},
+            TEST_SECRET_KEY,
+            TEST_AUTH_KEY,
+        )
+
+        def _frame(enc):
+            return json.dumps({
+                "type": "ENCRYPTED",
+                "data": {"iv": enc["iv"], "payload": enc["payload"]},
+                "mac": enc["mac"],
+            })
+
+        ws_mock = AsyncMock()
+        ws_mock.recv = AsyncMock(side_effect=[_frame(challenge), _frame(reply)])
+        ws_mock.send = AsyncMock()
+        mock_connect = AsyncMock()
+        mock_connect.__aenter__ = AsyncMock(return_value=ws_mock)
+        mock_connect.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("custom_components.remootio.api.websockets.connect", return_value=mock_connect):
+            result = await api.async_send_command("OPEN", 1, **kwargs)
+
+        assert result is not None
+        # send #1 is AUTH, send #2 is the encrypted command frame
+        sent = json.loads(ws_mock.send.await_args_list[1].args[0])
+        return decrypt_frame(sent["data"], TEST_SECRET_KEY)["action"]
+
+    @pytest.mark.asyncio
+    async def test_duration_included_when_set(self):
+        action = await self._sent_action(duration=30)
+        assert action == {"type": "OPEN", "id": 101, "duration": 30}
+
+    @pytest.mark.asyncio
+    async def test_duration_omitted_by_default(self):
+        action = await self._sent_action()
+        assert action == {"type": "OPEN", "id": 101}
+        assert "duration" not in action

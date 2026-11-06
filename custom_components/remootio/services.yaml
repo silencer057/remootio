@@ -1,0 +1,21 @@
+hold_open:
+  target:
+    entity:
+      integration: remootio
+      domain: cover
+  fields:
+    duration:
+      required: true
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 1440
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    use_trigger:
+      required: false
+      default: false
+      selector:
+        boolean:

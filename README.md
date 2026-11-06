@@ -10,6 +10,7 @@ Complete Home Assistant integration for Remootio garage door controllers with UI
 - Open/close garage door directly from Home Assistant
 - Real-time door status via persistent WebSocket event listener (`local_push`)
 - **Toggle button** for Android Auto / CarPlay compatibility
+- **Hold open** for a set number of minutes (`remootio.hold_open`, API v3)
 
 ### Real-Time Updates
 - Persistent authenticated WebSocket connection receives `StateChange` events instantly — no polling delay
@@ -131,6 +132,43 @@ The integration includes **Toggle button** entities that work with Android Auto 
 5. The button will appear in CarPlay when connected to your car
 
 **Note:** The toggle buttons send a TRIGGER (channel 1) or TRIGGER_SECONDARY (channel 2) command — identical to pressing the corresponding button in the Remootio app.
+
+## Hold Open (`remootio.hold_open`)
+
+Remootio API v3 (firmware **2.24+**) can hold its output active for a number of minutes instead of pulsing it. Gate operators wired for "latch mode" stay open for as long as their input is held, which stops the operator's own auto-close timer, something a plain open/close from Home Assistant can't do.
+
+The integration exposes this as an entity service on the cover:
+
+```yaml
+action: remootio.hold_open
+target:
+  entity_id: cover.garage_door_channel_1
+data:
+  duration: 30        # minutes, 1-1440
+  # use_trigger: true # only if no sensor is installed (see below)
+```
+
+- **OPEN by default.** The service sends a directional `OPEN` with `duration`, so it only acts when the gate is closed and can never close an open gate by mistake. If the gate is already open, the firmware skips it, no hold is applied, and a warning is logged.
+- **`use_trigger`.** `OPEN` requires a sensor (`ERR_NO_SENSOR` without one). Set `use_trigger: true` to send `TRIGGER` with `duration` instead. `TRIGGER` toggles, so it will *close* a gate that is already open.
+- **No early release.** The Remootio API has no command to release a held output; the hold ends only when `duration` elapses. The 1440-minute (24 h) cap is the integration's own safety limit, since the API documents none.
+- Whether a held input keeps your gate open depends on the operator and its wiring. Test with `duration: 1` first.
+
+### Example: Dashboard button
+
+```yaml
+type: button
+name: Hold gate open 30 min
+icon: mdi:gate-open
+tap_action:
+  action: perform-action
+  perform_action: remootio.hold_open
+  target:
+    entity_id: cover.garage_door_channel_1
+  data:
+    duration: 30
+  confirmation:
+    text: Hold the gate open for 30 minutes?
+```
 
 ## Automations
 

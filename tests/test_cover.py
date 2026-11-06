@@ -1,7 +1,7 @@
 """Tests for custom_components.remootio.cover."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -85,3 +85,48 @@ class TestCoverMetadata:
         cover2 = RemootioCover(coordinator, 2)
         assert cover1._attr_translation_key == "channel_1"
         assert cover2._attr_translation_key == "channel_2"
+
+
+class TestHoldOpenService:
+    """remootio.hold_open is an entity service on the cover that forwards to
+    coordinator.async_hold_open (OPEN/TRIGGER with the API v3 duration)."""
+
+    @pytest.mark.asyncio
+    async def test_setup_registers_hold_open_service(self):
+        from custom_components.remootio import cover as cover_module
+        from custom_components.remootio.const import DOMAIN, SERVICE_HOLD_OPEN
+
+        coordinator = _make_coordinator()
+        hass = MagicMock()
+        hass.data = {DOMAIN: {"entry": coordinator}}
+        entry = MagicMock()
+        entry.entry_id = "entry"
+        platform = MagicMock()
+
+        with patch.object(
+            cover_module.entity_platform,
+            "async_get_current_platform",
+            return_value=platform,
+        ):
+            await cover_module.async_setup_entry(hass, entry, MagicMock())
+
+        platform.async_register_entity_service.assert_called_once()
+        name, _schema, method = platform.async_register_entity_service.call_args[0]
+        assert name == SERVICE_HOLD_OPEN
+        assert method == "async_hold_open"
+
+    @pytest.mark.asyncio
+    async def test_hold_open_defaults_to_open(self):
+        coordinator = _make_coordinator()
+        coordinator.async_hold_open = AsyncMock()
+        cover = RemootioCover(coordinator, 1)
+        await cover.async_hold_open(duration=30)
+        coordinator.async_hold_open.assert_awaited_once_with(1, 30, use_trigger=False)
+
+    @pytest.mark.asyncio
+    async def test_hold_open_with_trigger(self):
+        coordinator = _make_coordinator()
+        coordinator.async_hold_open = AsyncMock()
+        cover = RemootioCover(coordinator, 1)
+        await cover.async_hold_open(duration=5, use_trigger=True)
+        coordinator.async_hold_open.assert_awaited_once_with(1, 5, use_trigger=True)

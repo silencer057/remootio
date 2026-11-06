@@ -460,3 +460,82 @@ class TestDeviceInfo:
         assert info["name"] == "Test Garage"
         assert info["manufacturer"] == "Remootio"
         assert info["model"] == "Garage Door Controller"
+
+
+class TestHoldOpen:
+    """async_hold_open sends OPEN (or TRIGGER) with the API v3 duration field
+    through the same exclusive stop/send/restart path as other commands."""
+
+    def _listener(self, mock_coordinator):
+        mock_listener = MagicMock()
+        mock_listener.async_start = AsyncMock()
+        mock_listener.async_stop = AsyncMock()
+        mock_coordinator._listener = mock_listener
+        return mock_listener
+
+    @pytest.mark.asyncio
+    async def test_sends_open_with_duration(self, mock_coordinator):
+        mock_coordinator.api.async_send_command = AsyncMock(
+            return_value={"response": {"success": True, "relayTriggered": True}}
+        )
+        listener = self._listener(mock_coordinator)
+
+        await mock_coordinator.async_hold_open(1, 30)
+
+        mock_coordinator.api.async_send_command.assert_awaited_once_with(
+            "OPEN", 1, duration=30
+        )
+        listener.async_stop.assert_awaited_once()
+        listener.async_start.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_use_trigger_sends_trigger_with_duration(self, mock_coordinator):
+        mock_coordinator.api.async_send_command = AsyncMock(
+            return_value={"response": {"success": True, "relayTriggered": True}}
+        )
+        self._listener(mock_coordinator)
+
+        await mock_coordinator.async_hold_open(1, 5, use_trigger=True)
+
+        mock_coordinator.api.async_send_command.assert_awaited_once_with(
+            "TRIGGER", 1, duration=5
+        )
+
+    @pytest.mark.parametrize("relay,duration", [(2, 5), (1, 0), (1, -3)])
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_args(self, mock_coordinator, relay, duration):
+        mock_coordinator.api.async_send_command = AsyncMock()
+
+        with pytest.raises(ValueError):
+            await mock_coordinator.async_hold_open(relay, duration)
+
+        mock_coordinator.api.async_send_command.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_warns_when_hold_not_applied(self, mock_coordinator):
+        """OPEN on an already-open gate doesn't fire the relay, so no hold is
+        applied — that must be logged rather than pass silently."""
+        mock_coordinator.api.async_send_command = AsyncMock(
+            return_value={"response": {"success": True, "relayTriggered": False}}
+        )
+        self._listener(mock_coordinator)
+
+        with patch("custom_components.remootio.coordinator._LOGGER") as mock_logger:
+            await mock_coordinator.async_hold_open(1, 30)
+
+        assert mock_logger.warning.called
+        assert "no hold was applied" in mock_logger.warning.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_plain_commands_unchanged(self, mock_coordinator):
+        """Commands without a hold must not pass a duration kwarg at all."""
+        mock_coordinator.api.async_send_command = AsyncMock(
+            return_value={"response": {"success": True, "relayTriggered": False}}
+        )
+        self._listener(mock_coordinator)
+
+        with patch("custom_components.remootio.coordinator._LOGGER") as mock_logger:
+            await mock_coordinator.async_open(1)
+
+        mock_coordinator.api.async_send_command.assert_awaited_once_with("OPEN", 1)
+        mock_logger.warning.assert_not_called()

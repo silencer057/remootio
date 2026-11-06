@@ -69,5 +69,21 @@
         "name": "Last Closed Channel 1"
       }
     }
+  },
+  "services": {
+    "hold_open": {
+      "name": "Hold open",
+      "description": "Opens the gate and holds the Remootio output active for a set number of minutes, so gate operators in latch mode stay open instead of auto-closing. The hold can't be released early; it ends when the time runs out. Requires Remootio firmware 2.24 or later.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "How long to hold the output active, in minutes."
+        },
+        "use_trigger": {
+          "name": "Use TRIGGER instead of OPEN",
+          "description": "Send TRIGGER instead of OPEN. Only needed if no sensor is installed (OPEN requires one). TRIGGER toggles, so it will close a gate that is already open."
+        }
+      }
+    }
   }
 }

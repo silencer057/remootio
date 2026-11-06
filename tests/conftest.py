@@ -69,11 +69,23 @@ class _Vol:
     @staticmethod
     def Optional(key, **kwargs):
         return key
+    @staticmethod
+    def All(*validators):
+        return validators
+    @staticmethod
+    def Coerce(type_):
+        return type_
+    @staticmethod
+    def Range(**kwargs):
+        return kwargs
 
 _make_module("voluptuous", {
     "Schema": _VolSchema,
     "Required": _Vol.Required,
     "Optional": _Vol.Optional,
+    "All": _Vol.All,
+    "Coerce": _Vol.Coerce,
+    "Range": _Vol.Range,
 })
 
 # --- sensor platform ---
@@ -163,7 +175,10 @@ _make_module("homeassistant.helpers.dispatcher", {
     "async_dispatcher_send": _async_dispatcher_send,
 })
 
-_make_module("homeassistant.helpers.entity_platform", {"AddEntitiesCallback": MagicMock})
+_make_module("homeassistant.helpers.entity_platform", {
+    "AddEntitiesCallback": MagicMock,
+    "async_get_current_platform": MagicMock(),
+})
 
 class _RestoreEntity:
     async def async_added_to_hass(self) -> None:

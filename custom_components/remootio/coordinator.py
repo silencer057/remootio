@@ -233,7 +233,9 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         self._previous_states = dict(states)
         return states
 
-    async def _async_send_exclusive(self, command_type: str, relay_number: int) -> None:
+    async def _async_send_exclusive(
+        self, command_type: str, relay_number: int, duration: int | None = None
+    ) -> None:
         """Send *command_type* with exclusive WebSocket access.
 
         Stops the event listener first so the command gets exclusive
@@ -250,7 +252,14 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         async with self._command_lock:
             await self.async_stop_event_listener()
             try:
-                result = await self.api.async_send_command(command_type, relay_number)
+                if duration is None:
+                    result = await self.api.async_send_command(
+                        command_type, relay_number
+                    )
+                else:
+                    result = await self.api.async_send_command(
+                        command_type, relay_number, duration=duration
+                    )
             finally:
                 await self.async_start_event_listener()
 
@@ -268,6 +277,22 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
             _LOGGER.warning(
                 "%s command to relay %d was rejected by the device",
                 command_type,
+                relay_number,
+            )
+        elif (
+            duration is not None
+            and result.get("response", {}).get("relayTriggered") is False
+        ):
+            # Directional OPEN only fires from "closed", so a hold requested
+            # while the gate is already open is silently skipped by the
+            # firmware — say so, or the user is left wondering why the gate
+            # closed on its own schedule anyway.
+            _LOGGER.warning(
+                "%s with a %d-minute hold on relay %d did not trigger the "
+                "relay (the gate was probably already in the target state), "
+                "so no hold was applied",
+                command_type,
+                duration,
                 relay_number,
             )
 
@@ -308,3 +333,29 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
                 "directional action for the secondary relay"
             )
         await self._async_send_exclusive("CLOSE", relay_number)
+
+    async def async_hold_open(
+        self, relay_number: int, duration: int, use_trigger: bool = False
+    ) -> None:
+        """Open and hold the output active for *duration* minutes (API v3).
+
+        Sends OPEN with the v3 ``duration`` field by default, so it only acts
+        when the gate is closed and can never close an open gate by mistake.
+        OPEN needs a sensor (the device answers ``ERR_NO_SENSOR`` without
+        one), so *use_trigger* sends TRIGGER with the same field instead for
+        installs without a sensor — note TRIGGER toggles, so on those it will
+        close a gate that is already open.
+
+        The Remootio API has no way to release a held output early; the hold
+        ends only when *duration* elapses. Requires Remootio firmware 2.24+.
+        """
+        if relay_number != 1:
+            raise ValueError(
+                "hold_open is only supported on relay 1 (the cover entity)"
+            )
+        duration = int(duration)
+        if duration < 1:
+            raise ValueError("duration must be at least 1 minute")
+        await self._async_send_exclusive(
+            "TRIGGER" if use_trigger else "OPEN", relay_number, duration=duration
+        )

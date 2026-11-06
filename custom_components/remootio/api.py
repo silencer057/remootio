@@ -409,9 +409,16 @@ class RemootioAPI:
         return session_key_hex, initial_action_id
 
     async def async_send_command(
-        self, command_type: str, relay_number: int
+        self, command_type: str, relay_number: int, duration: int | None = None
     ) -> dict | None:
         """Open WS, authenticate, send command, return decrypted response dict.
+
+        *duration* (minutes) is the optional API v3 field accepted by
+        TRIGGER, TRIGGER_SECONDARY, OPEN and CLOSE: when present, the device
+        holds its output active for that long instead of pulsing it (the
+        spec's "latch mode", for gate operators that stay open while their
+        input is held). It is omitted from the frame entirely when None so
+        older firmware sees exactly the same payload as before.
 
         Returns the decrypted response payload, or None on communication failure.
         """
@@ -438,6 +445,8 @@ class RemootioAPI:
                         "id": action_id,
                     }
                 }
+                if duration is not None:
+                    command_payload["action"]["duration"] = int(duration)
 
                 _LOGGER.debug(
                     "Command payload for relay %d: %s",
