@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .api import RemootioAPI, RemootioEventListener
 from .const import (
+    DEFAULT_HOLD_MINUTES,
     DOMAIN,
     MANUFACTURER,
     MODEL,
@@ -91,6 +92,10 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         # accepts one connection at a time. See _async_send_exclusive and
         # the poll-skip check in _async_update_data.
         self._command_lock = asyncio.Lock()
+        # Duration used by the "Hold open" button. Owned here so the number
+        # entity (which sets it, and restores it across restarts) and the
+        # button (which reads it) share one value.
+        self.hold_open_minutes: int = DEFAULT_HOLD_MINUTES
 
     @property
     def host(self) -> str:

@@ -48,11 +48,21 @@ class _Platform:
     COVER = "cover"
     BUTTON = "button"
     SENSOR = "sensor"
+    NUMBER = "number"
+
+class _EntityCategory:
+    CONFIG = "config"
+    DIAGNOSTIC = "diagnostic"
+
+class _UnitOfTime:
+    MINUTES = "min"
 
 _make_module("homeassistant.const", {
     "CONF_HOST": "host",
     "CONF_NAME": "name",
     "Platform": _Platform,
+    "EntityCategory": _EntityCategory,
+    "UnitOfTime": _UnitOfTime,
 })
 _make_module("homeassistant.exceptions")
 
@@ -139,6 +149,32 @@ _make_module("homeassistant.components.cover", {
     "CoverDeviceClass": _CoverDeviceClass,
     "CoverEntity": _CoverEntity,
     "CoverEntityFeature": _CoverEntityFeature,
+})
+
+# --- number platform ---
+class _NumberMode:
+    AUTO = "auto"
+    BOX = "box"
+    SLIDER = "slider"
+
+class _RestoreNumber:
+    _attr_has_entity_name = False
+    _attr_unique_id = None
+    _attr_icon = None
+    hass = None
+
+    async def async_added_to_hass(self) -> None:
+        pass
+
+    async def async_get_last_number_data(self):
+        return None
+
+    def async_write_ha_state(self):
+        pass
+
+_make_module("homeassistant.components.number", {
+    "NumberMode": _NumberMode,
+    "RestoreNumber": _RestoreNumber,
 })
 
 # --- button platform ---

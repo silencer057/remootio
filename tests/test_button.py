@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.remootio.button import RemootioButton
+from custom_components.remootio.button import RemootioButton, RemootioHoldOpenButton
 from tests.conftest import TEST_HOST
 
 
@@ -61,3 +61,28 @@ class TestButtonMetadata:
         button2 = RemootioButton(coordinator, 2)
         assert button1._attr_translation_key == "toggle_channel_1"
         assert button2._attr_translation_key == "toggle_channel_2"
+
+
+class TestHoldOpenButton:
+    """The Hold open button is the UI counterpart of remootio.hold_open and
+    uses the duration held on the coordinator by the number entity."""
+
+    @pytest.mark.asyncio
+    async def test_press_holds_for_configured_minutes(self):
+        coordinator = _make_coordinator()
+        coordinator.hold_open_minutes = 30
+        coordinator.async_hold_open = AsyncMock()
+        button = RemootioHoldOpenButton(coordinator)
+
+        await button.async_press()
+
+        coordinator.async_hold_open.assert_awaited_once_with(1, 30)
+        coordinator.async_trigger.assert_not_called()
+
+    def test_metadata(self):
+        coordinator = _make_coordinator()
+        button = RemootioHoldOpenButton(coordinator)
+        host_safe = TEST_HOST.replace(".", "_")
+        assert button._attr_unique_id == f"remootio_{host_safe}_hold_open_ch1"
+        assert button._attr_translation_key == "hold_open"
+        assert button.device_info is coordinator.device_info

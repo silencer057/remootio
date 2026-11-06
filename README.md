@@ -99,6 +99,8 @@ After setup, you'll have the following entities:
 | `cover.garage_door_channel_1` | Cover | Channel 1 — open/close control with status |
 | `button.garage_door_toggle_channel_1` | Button | Channel 1 toggle (Android Auto / CarPlay) |
 | `button.garage_door_toggle_channel_2` | Button | Channel 2 trigger (Android Auto / CarPlay) |
+| `button.garage_door_hold_open` | Button | Open and hold for the configured duration (see [Hold Open](#hold-open-remootiohold_open)) |
+| `number.garage_door_hold_open_duration` | Number (config) | Minutes the Hold open button holds the output (1–1440, default 15, restored across restarts) |
 | `sensor.garage_door_operation_count_channel_1` | Sensor | Number of times channel 1 has opened (persisted across restarts) |
 | `sensor.garage_door_last_opened_channel_1` | Sensor | Timestamp of last channel 1 open |
 | `sensor.garage_door_last_closed_channel_1` | Sensor | Timestamp of last channel 1 close |
@@ -137,7 +139,9 @@ The integration includes **Toggle button** entities that work with Android Auto 
 
 Remootio API v3 (firmware **2.24+**) can hold its output active for a number of minutes instead of pulsing it. Gate operators wired for "latch mode" stay open for as long as their input is held, which stops the operator's own auto-close timer, something a plain open/close from Home Assistant can't do.
 
-The integration exposes this as an entity service on the cover:
+**From the UI:** set **Hold open duration** (minutes) on the device page, then press the **Hold open** button. The button works from dashboards, the device page, and Android Auto / CarPlay like the toggle buttons.
+
+**From automations and scripts:** use the `remootio.hold_open` entity service on the cover, which takes its own duration:
 
 ```yaml
 action: remootio.hold_open
@@ -153,7 +157,9 @@ data:
 - **No early release.** The Remootio API has no command to release a held output; the hold ends only when `duration` elapses. The 1440-minute (24 h) cap is the integration's own safety limit, since the API documents none.
 - Whether a held input keeps your gate open depends on the operator and its wiring. Test with `duration: 1` first.
 
-### Example: Dashboard button
+### Example: Fixed-duration dashboard button
+
+The **Hold open** button entity covers most cases. For a dashboard button with its own fixed duration:
 
 ```yaml
 type: button

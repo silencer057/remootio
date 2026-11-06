@@ -56,6 +56,14 @@
       },
       "toggle_channel_2": {
         "name": "Toggle Channel 2"
+      },
+      "hold_open": {
+        "name": "Hold open"
+      }
+    },
+    "number": {
+      "hold_open_duration": {
+        "name": "Hold open duration"
       }
     },
     "sensor": {

@@ -19,3 +19,5 @@ ATTR_USE_TRIGGER = "use_trigger"
 # The API spec gives no maximum for ``duration``; cap it at 24 hours so a
 # typo can't latch the gate open for days with no way to release it early.
 MAX_HOLD_MINUTES = 1440
+# Starting value for the "Hold open duration" number entity.
+DEFAULT_HOLD_MINUTES = 15
