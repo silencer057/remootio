@@ -95,12 +95,16 @@ After setup, you'll have the following entities:
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| `cover.garage_door_channel_1` | Cover | Channel 1 — open/close control with status |
-| `button.garage_door_toggle_channel_1` | Button | Channel 1 toggle (Android Auto / CarPlay) |
-| `button.garage_door_toggle_channel_2` | Button | Channel 2 trigger (Android Auto / CarPlay) |
-| `sensor.garage_door_operation_count_channel_1` | Sensor | Number of times channel 1 has opened (persisted across restarts) |
-| `sensor.garage_door_last_opened_channel_1` | Sensor | Timestamp of last channel 1 open |
-| `sensor.garage_door_last_closed_channel_1` | Sensor | Timestamp of last channel 1 close |
+| `cover.garage_door` | Cover | The door/gate itself: open/close control with status (named after the device) |
+| `button.garage_door_toggle` | Button | Toggle the main output (Android Auto / CarPlay) |
+| `button.garage_door_secondary_output` | Button | Trigger the secondary output (Android Auto / CarPlay) |
+| `sensor.garage_door_operation_count` | Sensor | Number of times the door has opened (persisted across restarts) |
+| `sensor.garage_door_last_opened` | Sensor | Timestamp of last open |
+| `sensor.garage_door_last_closed` | Sensor | Timestamp of last close |
+
+Entity IDs above assume the default device name "Garage Door"; they follow whatever name you give the device.
+
+> **Upgrading from 2.7.x:** entities were previously named "… Channel 1" / "… Channel 2". Only the display names changed; existing installs keep their entity IDs (e.g. `cover.garage_door_channel_1`), so automations and dashboards are unaffected. You can rename them to the new style in each entity's settings if you like.
 
 The device will appear in your Device Registry with manufacturer "Remootio" and model "Garage Door Controller".
 
@@ -119,7 +123,7 @@ The integration includes **Toggle button** entities that work with Android Auto 
 1. Install the **Home Assistant Companion App** on your Android phone
 2. Open the app and go to **Settings** > **Companion App** > **Android Auto**
 3. Enable Android Auto integration
-4. Add `button.garage_door_toggle_channel_1` (and/or channel 2) to your favorites
+4. Add `button.garage_door_toggle` (and/or `button.garage_door_secondary_output`) to your favorites
 5. The button will appear in Android Auto when connected to your car
 
 ### Setup for CarPlay
@@ -127,7 +131,7 @@ The integration includes **Toggle button** entities that work with Android Auto 
 1. Install the **Home Assistant Companion App** on your iPhone
 2. Open the app and go to **Settings** > **Companion App** > **CarPlay**
 3. Configure which entities appear in CarPlay
-4. Add `button.garage_door_toggle_channel_1` (and/or channel 2)
+4. Add `button.garage_door_toggle` (and/or `button.garage_door_secondary_output`)
 5. The button will appear in CarPlay when connected to your car
 
 **Note:** The toggle buttons send a TRIGGER (channel 1) or TRIGGER_SECONDARY (channel 2) command — identical to pressing the corresponding button in the Remootio app.

@@ -85,3 +85,16 @@ class TestCoverMetadata:
         cover2 = RemootioCover(coordinator, 2)
         assert cover1._attr_translation_key == "channel_1"
         assert cover2._attr_translation_key == "channel_2"
+
+
+class TestCoverNaming:
+    """The relay-1 cover is the device's main entity, so it takes the
+    device name (name=None) instead of "<device> Channel 1"."""
+
+    def test_main_cover_uses_device_name(self):
+        cover = RemootioCover(_make_coordinator(), 1)
+        assert cover._attr_name is None
+
+    def test_secondary_cover_keeps_translated_name(self):
+        cover = RemootioCover(_make_coordinator(), 2)
+        assert "_attr_name" not in vars(cover)
