@@ -47,7 +47,7 @@
   "entity": {
     "cover": {
       "channel_1": {
-        "name": "Channel 1"
+        "name": "Door"
       }
     },
     "binary_sensor": {
@@ -57,10 +57,10 @@
     },
     "button": {
       "toggle_channel_1": {
-        "name": "Toggle Channel 1"
+        "name": "Toggle"
       },
       "toggle_channel_2": {
-        "name": "Toggle Channel 2"
+        "name": "Secondary output"
       },
       "hold_open": {
         "name": "Hold open"
@@ -73,13 +73,13 @@
     },
     "sensor": {
       "operation_count_channel_1": {
-        "name": "Operation Count Channel 1"
+        "name": "Operation count"
       },
       "last_opened_channel_1": {
-        "name": "Last Opened Channel 1"
+        "name": "Last opened"
       },
       "last_closed_channel_1": {
-        "name": "Last Closed Channel 1"
+        "name": "Last closed"
       },
       "last_operated_by": {
         "name": "Last operated by"

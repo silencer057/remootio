@@ -66,6 +66,11 @@ class RemootioCover(CoordinatorEntity[RemootioCoordinator], CoverEntity):
             f"remootio_{coordinator.host.replace('.', '_')}_ch{relay_number}"
         )
         self._attr_translation_key = f"channel_{relay_number}"
+        if relay_number == 1:
+            # The door/gate is the device's main feature, so per HA naming
+            # guidelines it takes the device's own name ("Garage Door",
+            # "Gate", ...) rather than "<device> Channel 1".
+            self._attr_name = None
 
     @property
     def device_info(self) -> DeviceInfo:

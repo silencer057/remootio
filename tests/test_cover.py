@@ -130,3 +130,14 @@ class TestHoldOpenService:
         cover = RemootioCover(coordinator, 1)
         await cover.async_hold_open(duration=5, use_trigger=True)
         coordinator.async_hold_open.assert_awaited_once_with(1, 5, use_trigger=True)
+class TestCoverNaming:
+    """The relay-1 cover is the device's main entity, so it takes the
+    device name (name=None) instead of "<device> Channel 1"."""
+
+    def test_main_cover_uses_device_name(self):
+        cover = RemootioCover(_make_coordinator(), 1)
+        assert cover._attr_name is None
+
+    def test_secondary_cover_keeps_translated_name(self):
+        cover = RemootioCover(_make_coordinator(), 2)
+        assert "_attr_name" not in vars(cover)

@@ -96,18 +96,22 @@ After setup, you'll have the following entities:
 
 | Entity | Type | Description |
 |--------|------|-------------|
-| `cover.garage_door_channel_1` | Cover | Channel 1 — open/close control with status |
-| `button.garage_door_toggle_channel_1` | Button | Channel 1 toggle (Android Auto / CarPlay) |
-| `button.garage_door_toggle_channel_2` | Button | Channel 2 trigger (Android Auto / CarPlay) |
+| `cover.garage_door` | Cover | The door/gate itself: open/close control with status (named after the device) |
+| `button.garage_door_toggle` | Button | Toggle the main output (Android Auto / CarPlay) |
+| `button.garage_door_secondary_output` | Button | Trigger the secondary output (Android Auto / CarPlay) |
 | `button.garage_door_hold_open` | Button | Open and hold for the configured duration (see [Hold Open](#hold-open-remootiohold_open)) |
-| `sensor.garage_door_last_operated_by` | Sensor | Who last operated the door, e.g. "Guest key 5 via internet" (attributes: `key_type`, `key_nr`, `via`, `time`) |
-| `binary_sensor.garage_door_hold_active` | Binary sensor | On while the device is holding its output active (timed hold) |
 | `number.garage_door_hold_open_duration` | Number (config) | Minutes the Hold open button holds the output (1–1440, default 15, restored across restarts) |
-| `sensor.garage_door_operation_count_channel_1` | Sensor | Number of times channel 1 has opened (persisted across restarts) |
-| `sensor.garage_door_last_opened_channel_1` | Sensor | Timestamp of last channel 1 open |
-| `sensor.garage_door_last_closed_channel_1` | Sensor | Timestamp of last channel 1 close |
+| `binary_sensor.garage_door_hold_active` | Binary sensor | On while the device is holding its output active (timed hold) |
+| `sensor.garage_door_last_operated_by` | Sensor | Who last operated the door, e.g. "Guest key 5 via internet" (attributes: `key_type`, `key_nr`, `via`, `time`) |
+| `sensor.garage_door_operation_count` | Sensor | Number of times the door has opened (persisted across restarts) |
+| `sensor.garage_door_last_opened` | Sensor | Timestamp of last open |
+| `sensor.garage_door_last_closed` | Sensor | Timestamp of last close |
 
-The device will appear in your Device Registry with manufacturer "Remootio" and model "Garage Door Controller".
+Entity IDs above assume the default device name "Garage Door"; they follow whatever name you give the device.
+
+> **Upgrading from 2.7.x:** entities were previously named "… Channel 1" / "… Channel 2". Only the display names changed; existing installs keep their entity IDs (e.g. `cover.garage_door_channel_1`), so automations and dashboards are unaffected. You can rename them to the new style in each entity's settings if you like.
+
+The device will appear in your Device Registry with manufacturer "Remootio"; its model, serial number and API version are filled in from the device on first connect.
 
 ### Dual-output devices (e.g. Remootio 3)
 
@@ -124,7 +128,7 @@ The integration includes **Toggle button** entities that work with Android Auto 
 1. Install the **Home Assistant Companion App** on your Android phone
 2. Open the app and go to **Settings** > **Companion App** > **Android Auto**
 3. Enable Android Auto integration
-4. Add `button.garage_door_toggle_channel_1` (and/or channel 2) to your favorites
+4. Add `button.garage_door_toggle` (and/or `button.garage_door_secondary_output`) to your favorites
 5. The button will appear in Android Auto when connected to your car
 
 ### Setup for CarPlay
@@ -132,7 +136,7 @@ The integration includes **Toggle button** entities that work with Android Auto 
 1. Install the **Home Assistant Companion App** on your iPhone
 2. Open the app and go to **Settings** > **Companion App** > **CarPlay**
 3. Configure which entities appear in CarPlay
-4. Add `button.garage_door_toggle_channel_1` (and/or channel 2)
+4. Add `button.garage_door_toggle` (and/or `button.garage_door_secondary_output`)
 5. The button will appear in CarPlay when connected to your car
 
 **Note:** The toggle buttons send a TRIGGER (channel 1) or TRIGGER_SECONDARY (channel 2) command — identical to pressing the corresponding button in the Remootio app.
@@ -148,7 +152,7 @@ Remootio API v3 (firmware **2.24+**) can hold its output active for a number of 
 ```yaml
 action: remootio.hold_open
 target:
-  entity_id: cover.garage_door_channel_1
+  entity_id: cover.garage_door
 data:
   duration: 30        # minutes, 1-1440
   # use_trigger: true # only if no sensor is installed (see below)
@@ -171,7 +175,7 @@ tap_action:
   action: perform-action
   perform_action: remootio.hold_open
   target:
-    entity_id: cover.garage_door_channel_1
+    entity_id: cover.garage_door
   data:
     duration: 30
   confirmation:
