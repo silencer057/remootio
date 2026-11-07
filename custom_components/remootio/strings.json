@@ -50,6 +50,11 @@
         "name": "Channel 1"
       }
     },
+    "binary_sensor": {
+      "hold_active": {
+        "name": "Hold active"
+      }
+    },
     "button": {
       "toggle_channel_1": {
         "name": "Toggle Channel 1"
@@ -75,6 +80,9 @@
       },
       "last_closed_channel_1": {
         "name": "Last Closed Channel 1"
+      },
+      "last_operated_by": {
+        "name": "Last operated by"
       }
     }
   },

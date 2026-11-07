@@ -100,6 +100,8 @@ After setup, you'll have the following entities:
 | `button.garage_door_toggle_channel_1` | Button | Channel 1 toggle (Android Auto / CarPlay) |
 | `button.garage_door_toggle_channel_2` | Button | Channel 2 trigger (Android Auto / CarPlay) |
 | `button.garage_door_hold_open` | Button | Open and hold for the configured duration (see [Hold Open](#hold-open-remootiohold_open)) |
+| `sensor.garage_door_last_operated_by` | Sensor | Who last operated the door, e.g. "Guest key 5 via internet" (attributes: `key_type`, `key_nr`, `via`, `time`) |
+| `binary_sensor.garage_door_hold_active` | Binary sensor | On while the device is holding its output active (timed hold) |
 | `number.garage_door_hold_open_duration` | Number (config) | Minutes the Hold open button holds the output (1–1440, default 15, restored across restarts) |
 | `sensor.garage_door_operation_count_channel_1` | Sensor | Number of times channel 1 has opened (persisted across restarts) |
 | `sensor.garage_door_last_opened_channel_1` | Sensor | Timestamp of last channel 1 open |
@@ -174,6 +176,49 @@ tap_action:
     duration: 30
   confirmation:
     text: Hold the gate open for 30 minutes?
+```
+
+## Device Events
+
+With the Remootio API enabled **with logging**, the integration listens for the device's own events, not just open/closed:
+
+- **Who operated it**: every trigger updates **Last operated by** and fires a `remootio_relay_trigger` event with `output` (1 or 2), `key_type` (`master key`, `unique key`, `guest key`, `api key`, `smart home`, `automation`), `key_nr` and `via` (`bluetooth`, `wifi`, `internet`, `autoopen`, ...). Commands sent from Home Assistant show as "API key".
+- **Hold active**: follows the device's output activated/deactivated events, so it shows timed holds from any source.
+- **Key changes**: adding, removing or changing a key's access fires `remootio_key_management` with `key_type`, `key_nr`, `removed`, and the `bluetooth` / `wifi` / `internet` / `notification` flags.
+- **Device info**: on first connect the integration reads the device's model (Remootio 1/2/3), serial number and API version into the device page. Hold open is refused with a clear error on firmware older than 2.24 (API v3).
+
+Events the device replays from its buffer when Home Assistant restarts are applied to state (e.g. Hold active) but don't re-fire `remootio_*` events.
+
+### Example: Notify when a guest key opens the door
+
+```yaml
+automation:
+  - alias: "Guest key used"
+    trigger:
+      - platform: event
+        event_type: remootio_relay_trigger
+        event_data:
+          key_type: guest key
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Guest key {{ trigger.event.data.key_nr }} operated the door via {{ trigger.event.data.via }}"
+```
+
+### Example: Alert on key changes
+
+```yaml
+automation:
+  - alias: "Remootio key changed"
+    trigger:
+      - platform: event
+        event_type: remootio_key_management
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: >-
+            Remootio {{ trigger.event.data.key_type }} {{ trigger.event.data.key_nr }}
+            {{ 'was removed' if trigger.event.data.removed else 'access changed' }}
 ```
 
 ## Automations

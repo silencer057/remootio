@@ -31,4 +31,7 @@ async def async_get_config_entry_diagnostics(
         "relay_states": coordinator.data,
         "update_interval_seconds": coordinator.update_interval.total_seconds(),
         "last_update_success": coordinator.last_update_success,
+        "api_version": coordinator.api_version,
+        "remootio_version": coordinator.remootio_version,
+        "hold_active": coordinator.hold_active,
     }

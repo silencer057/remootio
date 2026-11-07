@@ -6,16 +6,22 @@ import logging
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import RemootioAPI, RemootioEventListener
 from .const import (
     DEFAULT_HOLD_MINUTES,
     DOMAIN,
+    EVENT_KEY_MANAGEMENT,
+    EVENT_RELAY_TRIGGER,
     MANUFACTURER,
+    MIN_API_VERSION_HOLD,
     MODEL,
+    REMOOTIO_MODELS,
     SIGNAL_REMOOTIO_STATE_CHANGED,
 )
 
@@ -96,6 +102,14 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         # entity (which sets it, and restores it across restarts) and the
         # button (which reads it) share one value.
         self.hold_open_minutes: int = DEFAULT_HOLD_MINUTES
+        # From device events (see _handle_device_event).
+        self.hold_active: bool = False
+        self.last_operated: dict | None = None
+        # From SERVER_HELLO (see _handle_server_hello); None until known.
+        self.api_version: int | None = None
+        self.serial_number: str | None = None
+        self.remootio_version: str | None = None
+        self._model: str = MODEL
 
     @property
     def host(self) -> str:
@@ -109,7 +123,7 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
             identifiers={(DOMAIN, self.api.host)},
             name=self._device_name,
             manufacturer=MANUFACTURER,
-            model=MODEL,
+            model=self._model,
         )
 
     async def async_start_event_listener(self) -> None:
@@ -121,7 +135,10 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         """
         if self._listener is None:
             self._listener = RemootioEventListener(
-                self.api, self._handle_event_state_change
+                self.api,
+                self._handle_event_state_change,
+                on_event=self._handle_device_event,
+                on_hello=self._handle_server_hello,
             )
         await self._listener.async_start()
 
@@ -153,6 +170,95 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         if old_state is not None:
             signal = f"{SIGNAL_REMOOTIO_STATE_CHANGED}_{self.api.host}_ch1"
             async_dispatcher_send(self.hass, signal, old_state, state)
+
+    async def _handle_server_hello(self, frame: dict) -> None:
+        """Record device identity from SERVER_HELLO and update the registry."""
+        api_version = frame.get("apiVersion")
+        self.api_version = api_version if isinstance(api_version, int) else None
+        self.serial_number = frame.get("serialNumber") or None
+        self.remootio_version = frame.get("remootioVersion") or None
+        self._model = REMOOTIO_MODELS.get(self.remootio_version, MODEL)
+
+        if self.api_version is not None and self.api_version < MIN_API_VERSION_HOLD:
+            _LOGGER.warning(
+                "%s reports Remootio API v%s; hold open needs API v%s "
+                "(Remootio firmware 2.24 or later)",
+                self.api.host,
+                self.api_version,
+                MIN_API_VERSION_HOLD,
+            )
+
+        registry = dr.async_get(self.hass)
+        device = registry.async_get_device(identifiers={(DOMAIN, self.api.host)})
+        if device is None:
+            return
+        changes: dict = {"model": self._model}
+        if self.api_version is not None:
+            changes["sw_version"] = f"API v{self.api_version}"
+        if self.serial_number:
+            changes["serial_number"] = self.serial_number
+        try:
+            registry.async_update_device(device.id, **changes)
+        except TypeError:
+            # serial_number needs HA 2023.11+; keep the rest on older cores.
+            changes.pop("serial_number", None)
+            registry.async_update_device(device.id, **changes)
+
+    async def _handle_device_event(self, event: dict, replayed: bool) -> None:
+        """Handle a non-StateChange device event from the listener.
+
+        State-like events (output held / released) are always applied —
+        replaying them in order converges on the right state. One-shot
+        events (who triggered, key changes) are skipped when *replayed*, so
+        a Home Assistant restart doesn't re-fire old ones from the device's
+        buffer.
+        """
+        event_type = event.get("type")
+        data = event.get("data") or {}
+
+        if event_type in ("Output1Activated", "OutputHeldActive"):
+            self._set_hold_active(True)
+        elif event_type == "Output1Deactivated":
+            self._set_hold_active(False)
+
+        if replayed:
+            return
+
+        base = {"host": self.api.host, "device_name": self._device_name}
+        if event_type in ("RelayTrigger", "SecondaryRelayTrigger"):
+            output = 1 if event_type == "RelayTrigger" else 2
+            info = {
+                "output": output,
+                "key_type": data.get("keyType"),
+                "key_nr": data.get("keyNr"),
+                "via": data.get("via"),
+            }
+            self.hass.bus.async_fire(EVENT_RELAY_TRIGGER, {**base, **info})
+            if output == 1:
+                self.last_operated = {**info, "time": dt_util.utcnow()}
+                self.async_update_listeners()
+        elif event_type == "KeyManagement":
+            self.hass.bus.async_fire(
+                EVENT_KEY_MANAGEMENT,
+                {
+                    **base,
+                    "key_type": data.get("keyType"),
+                    "key_nr": data.get("keyNr"),
+                    "removed": bool(data.get("isRemoved", False)),
+                    "bluetooth": data.get("bluetooth"),
+                    "wifi": data.get("wifi"),
+                    "internet": data.get("internet"),
+                    "notification": data.get("notification"),
+                },
+            )
+        else:
+            _LOGGER.debug("Unhandled Remootio event: %s", event_type)
+
+    def _set_hold_active(self, active: bool) -> None:
+        """Update the hold-active flag and notify entities on change."""
+        if self.hold_active != active:
+            self.hold_active = active
+            self.async_update_listeners()
 
     async def _async_update_data(self) -> dict[int, str | None]:
         """Query relay 1 only.
@@ -361,6 +467,12 @@ class RemootioCoordinator(DataUpdateCoordinator[dict[int, str | None]]):
         duration = int(duration)
         if duration < 1:
             raise ValueError("duration must be at least 1 minute")
+        if self.api_version is not None and self.api_version < MIN_API_VERSION_HOLD:
+            raise ValueError(
+                f"Hold open needs Remootio firmware 2.24 or later (API "
+                f"v{MIN_API_VERSION_HOLD}); this device reports API "
+                f"v{self.api_version}. Update it in the Remootio app."
+            )
         await self._async_send_exclusive(
             "TRIGGER" if use_trigger else "OPEN", relay_number, duration=duration
         )

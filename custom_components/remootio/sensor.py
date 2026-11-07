@@ -17,7 +17,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, SIGNAL_REMOOTIO_STATE_CHANGED
+from .const import DOMAIN, SIGNAL_REMOOTIO_STATE_CHANGED, format_operator
 from .coordinator import RemootioCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -37,6 +37,7 @@ async def async_setup_entry(
         RemootioOperationCountSensor(coordinator, relay_number=1),
         RemootioLastOpenedSensor(coordinator, relay_number=1),
         RemootioLastClosedSensor(coordinator, relay_number=1),
+        RemootioLastOperatedSensor(coordinator),
     ]
 
     async_add_entities(sensors)
@@ -171,3 +172,64 @@ class RemootioLastClosedSensor(_RemootioSensorBase):
         if new_state == "closed":
             self._timestamp = dt_util.utcnow()
             self.async_write_ha_state()
+
+
+class RemootioLastOperatedSensor(
+    CoordinatorEntity[RemootioCoordinator], RestoreEntity, SensorEntity
+):
+    """Who last operated the door, from the device's RelayTrigger event.
+
+    e.g. "Guest key 5 via internet", "Master key via Bluetooth",
+    "API key via Wi-Fi" (Home Assistant itself). Raw fields and the time are
+    attributes. Needs the Remootio API enabled with logging; restored
+    across restarts.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "last_operated_by"
+    _attr_icon = "mdi:account-key"
+
+    def __init__(self, coordinator: RemootioCoordinator) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"remootio_{coordinator.host.replace('.', '_')}_last_operated_by_ch1"
+        )
+        self._restored_value: str | None = None
+        self._restored_attrs: dict = {}
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info for device registry."""
+        return self.coordinator.device_info
+
+    @property
+    def native_value(self) -> str | None:
+        """Return who last operated the door."""
+        info = self.coordinator.last_operated
+        if info is None:
+            return self._restored_value
+        return format_operator(info["key_type"], info["key_nr"], info["via"])
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return the raw key fields and when it happened."""
+        info = self.coordinator.last_operated
+        if info is None:
+            return self._restored_attrs
+        return {
+            "key_type": info["key_type"],
+            "key_nr": info["key_nr"],
+            "via": info["via"],
+            "time": info["time"].isoformat(),
+        }
+
+    async def async_added_to_hass(self) -> None:
+        """Restore the last known operator."""
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            self._restored_value = last_state.state
+            self._restored_attrs = dict(last_state.attributes or {})
+            for key in ("friendly_name", "icon"):
+                self._restored_attrs.pop(key, None)

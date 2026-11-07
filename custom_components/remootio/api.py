@@ -114,6 +114,19 @@ class RemootioEventListener:
     Wi-Fi blip) can't block the read loop forever.  On every (re)connect the
     listener sends a QUERY so state changes that happened while disconnected
     are picked up immediately.
+
+    Besides StateChange, every other device event (RelayTrigger,
+    KeyManagement, Output1Activated, ...) is passed to the optional
+    *on_event* callback as ``on_event(event_dict, replayed)``. The device
+    replays buffered events when a client connects; with no known event
+    counter yet (first connection after start) those can be arbitrarily
+    old, so events arriving in the first few seconds of that connection
+    are flagged ``replayed=True`` — the coordinator still applies them to
+    state but doesn't fire Home Assistant events for them.
+
+    If *on_hello* is given, the first connection sends the unencrypted
+    HELLO frame before authenticating and passes the device's
+    SERVER_HELLO (apiVersion, serialNumber, remootioVersion) to it.
     """
 
     _BACKOFF_INITIAL = 5
@@ -121,14 +134,21 @@ class RemootioEventListener:
     _PING_INTERVAL = 45
     _ACTIVITY_TIMEOUT = 90
     _IO_TIMEOUT = 10
+    _PRIMING_SECONDS = 3
 
     def __init__(
         self,
         api: RemootioAPI,
         on_state_change: Callable[[str], Awaitable[None]],
+        on_event: Callable[[dict, bool], Awaitable[None]] | None = None,
+        on_hello: Callable[[dict], Awaitable[None]] | None = None,
     ) -> None:
         self._api = api
         self._on_state_change = on_state_change
+        self._on_event = on_event
+        self._on_hello = on_hello
+        self._hello_done = False
+        self._priming_until: float = 0.0
         self._task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self._last_event_cnt: int = -1
@@ -195,6 +215,9 @@ class RemootioEventListener:
         """Authenticate then consume events until the connection drops."""
         uri = f"ws://{self._api._host}:{self._api._port}"
         async with websockets.connect(uri, ping_interval=None) as websocket:
+            if self._on_hello is not None and not self._hello_done:
+                await self._async_hello(websocket)
+
             session_key_hex, initial_action_id = await self._api._async_authenticate(
                 websocket
             )
@@ -223,6 +246,10 @@ class RemootioEventListener:
 
             loop = asyncio.get_running_loop()
             self._last_activity = loop.time()
+            if self._last_event_cnt == -1:
+                # No baseline counter yet: whatever the device replays from
+                # its buffer right now may be old, so flag it as replayed.
+                self._priming_until = loop.time() + self._PRIMING_SECONDS
             watchdog_task = asyncio.ensure_future(self._keepalive_watchdog(websocket))
             self._connected = True
             try:
@@ -243,12 +270,16 @@ class RemootioEventListener:
                             await self._on_state_change(state)
                         continue
 
-                    event = decrypted.get("event", {})
-                    if event.get("type") != "StateChange":
+                    event = decrypted.get("event")
+                    if not isinstance(event, dict):
                         continue
 
-                    state = event.get("state")
-                    if not state or state == "no sensor":
+                    event_type = event.get("type")
+                    if event_type == "StateChange":
+                        state = event.get("state")
+                        if not state or state == "no sensor":
+                            continue
+                    elif self._on_event is None:
                         continue
 
                     cnt = event.get("cnt", -1)
@@ -257,12 +288,48 @@ class RemootioEventListener:
                         continue
 
                     self._last_event_cnt = cnt
-                    await self._on_state_change(state)
+                    if event_type == "StateChange":
+                        await self._on_state_change(state)
+                        continue
+
+                    try:
+                        await self._on_event(event, loop.time() < self._priming_until)
+                    except Exception:  # noqa: BLE001 - never let a handler kill the listener
+                        _LOGGER.exception(
+                            "Error handling Remootio %s event", event_type
+                        )
             finally:
                 self._connected = False
                 watchdog_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await watchdog_task
+
+    async def _async_hello(self, websocket) -> None:
+        """Send HELLO and pass SERVER_HELLO to on_hello (first connection only).
+
+        Best effort: any failure just skips device-info detection; it is
+        never retried, so a device that doesn't answer can't stall every
+        reconnect.
+        """
+        self._hello_done = True
+        try:
+            await asyncio.wait_for(
+                websocket.send(json.dumps({"type": "HELLO"})),
+                timeout=self._IO_TIMEOUT,
+            )
+            raw = await asyncio.wait_for(websocket.recv(), timeout=self._IO_TIMEOUT)
+            frame = json.loads(raw)
+        except (asyncio.TimeoutError, ValueError, TypeError) as err:
+            _LOGGER.debug("No SERVER_HELLO from %s: %s", self._api.host, err)
+            return
+
+        if isinstance(frame, dict) and frame.get("type") == "SERVER_HELLO":
+            try:
+                await self._on_hello(frame)
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Error handling Remootio SERVER_HELLO")
+        else:
+            _LOGGER.debug("Unexpected reply to HELLO from %s: %s", self._api.host, frame)
 
     async def _keepalive_watchdog(self, websocket) -> None:
         """Send application-level PINGs and force-close a silently-dead connection.

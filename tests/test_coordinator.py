@@ -354,7 +354,10 @@ class TestEventListenerLifecycle:
             await mock_coordinator.async_start_event_listener()
 
         mock_cls.assert_called_once_with(
-            mock_coordinator.api, mock_coordinator._handle_event_state_change
+            mock_coordinator.api,
+            mock_coordinator._handle_event_state_change,
+            on_event=mock_coordinator._handle_device_event,
+            on_hello=mock_coordinator._handle_server_hello,
         )
         mock_listener.async_start.assert_awaited_once()
         assert mock_coordinator._listener is mock_listener

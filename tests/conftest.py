@@ -49,6 +49,7 @@ class _Platform:
     BUTTON = "button"
     SENSOR = "sensor"
     NUMBER = "number"
+    BINARY_SENSOR = "binary_sensor"
 
 class _EntityCategory:
     CONFIG = "config"
@@ -177,6 +178,16 @@ _make_module("homeassistant.components.number", {
     "RestoreNumber": _RestoreNumber,
 })
 
+# --- binary_sensor platform ---
+class _BinarySensorEntity:
+    _attr_has_entity_name = False
+    _attr_unique_id = None
+    hass = None
+
+_make_module("homeassistant.components.binary_sensor", {
+    "BinarySensorEntity": _BinarySensorEntity,
+})
+
 # --- button platform ---
 class _ButtonEntity:
     _attr_has_entity_name = False
@@ -195,7 +206,13 @@ class _DeviceInfo(dict):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-_make_module("homeassistant.helpers.device_registry", {"DeviceInfo": _DeviceInfo})
+_device_registry = MagicMock()
+_device_registry.async_get_device.return_value = None
+
+_make_module("homeassistant.helpers.device_registry", {
+    "DeviceInfo": _DeviceInfo,
+    "async_get": MagicMock(return_value=_device_registry),
+})
 
 _dispatcher_connections: list = []
 
